@@ -81,12 +81,8 @@ class WienerlinienSensor(Entity):
         try:
             for monitor in data["monitors"]:
                 if monitor["lines"][0]["lineId"] == self._lineId:
-                    _LOGGER.warning("Found the line - id:" + str(self._lineId))
+                    _LOGGER.info("Found the line - id:" + str(self._lineId))
                     line = monitor["lines"][0]
-                    _LOGGER.warning(monitor["lines"])
-                    _LOGGER.warning(line)
-    
-                    _LOGGER.warning(DEPARTURES[self.firstnext]["key"])
                     departure = line["departures"]["departure"][
                         DEPARTURES[self.firstnext]["key"]
                     ]
