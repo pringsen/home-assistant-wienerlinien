@@ -1,7 +1,7 @@
 """
 A integration that allows you to get information about next departure from specified stop.
 For more details about this component, please refer to the documentation at
-https://github.com/tofuSCHNITZEL/home-assistant-wienerlinien
+https://github.com/pringsen/home-assistant-wienerlinien
 """
 import logging
 from datetime import timedelta
@@ -44,12 +44,9 @@ async def async_setup_platform(hass, config, add_devices_callback, discovery_inf
         api = WienerlinienAPI(async_create_clientsession(hass), hass.loop, stopid)
         data = await api.get_json()
         for monitor in data["data"]["monitors"]:
-            try:
-                _LOGGER.info("Appending Wienerlinien Monitor: " + monitor["locationStop"]["properties"]["attributes"]["rbl"])
-                dev.append(WienerlinienSensor(api, monitor, 'next'))
-                #dev.append(WienerlinienSensor(api, monitor, 'following'))
-            except Exception:
-                raise PlatformNotReady()
+            _LOGGER.info("Appending Wienerlinien Monitor: " + str(monitor["locationStop"]["properties"]["attributes"]["rbl"]))
+            dev.append(WienerlinienSensor(api, monitor, 'next'))
+            dev.append(WienerlinienSensor(api, monitor, 'following'))
     add_devices_callback(dev, True)
 
 
@@ -61,11 +58,11 @@ class WienerlinienSensor(Entity):
         self.api = api
         self.firstnext = firstnext
         self._name = monitor["locationStop"]["properties"]["title"] + ": " +  monitor["lines"][0]["name"] + " towards " + monitor["lines"][0]["towards"]
-        self._lineId = monitor["lines"][0]["linienId"]
+        self._lineId = monitor["lines"][0]["lineId"]
         self._monitor = monitor
         self._state = None
         self.attributes = {}
-        self._attr_unique_id = self._lineId +"_" +  monitor["locationStop"]["properties"]["attributes"]["rbl"] +"_" + monitor["lines"][0]["direction"]
+        self._attr_unique_id = str(self._lineId) + "_" + str(monitor["locationStop"]["properties"]["attributes"]["rbl"]) + "_" + monitor["lines"][0]["direction"] + "_" + self.firstnext
 
     async def async_update(self):
         """Update data."""
@@ -82,12 +79,25 @@ class WienerlinienSensor(Entity):
         if data is None:
             return
         try:
-            for monitor in data["data"]["monitors"]:
-                if monitor["lines"][0]["linienId"] == self._lineId:
+            for monitor in data["monitors"]:
+                if monitor["lines"][0]["lineId"] == self._lineId:
+                    _LOGGER.warning("Found the line - id:" + str(self._lineId))
                     line = monitor["lines"][0]
+                    _LOGGER.warning(monitor["lines"])
+                    _LOGGER.warning(line)
+    
+                    _LOGGER.warning(DEPARTURES[self.firstnext]["key"])
                     departure = line["departures"]["departure"][
                         DEPARTURES[self.firstnext]["key"]
                     ]
+
+                    if len(line["departures"]["departure"]) > DEPARTURES[self.firstnext]["key"] + 1:
+                        following_departure_countdown = line["departures"]["departure"][
+                            DEPARTURES[self.firstnext]["key"] + 1
+                        ]["departureTime"]["countdown"]
+                    else:
+                        following_departure_countdown = None
+                    
                     if "timeReal" in departure["departureTime"]:
                         self._state = departure["departureTime"]["timeReal"]
                     elif "timePlanned" in departure["departureTime"]:
@@ -101,9 +111,13 @@ class WienerlinienSensor(Entity):
                         "direction": line["direction"],
                         "name": line["name"],
                         "countdown": departure["departureTime"]["countdown"],
+                        "countdown_following": following_departure_countdown,
                     }
-        except Exception:
-            pass
+        except Exception as err:
+            _LOGGER.error(err)
+            _LOGGER.error(data)
+            raise err
+            #pass
 
     @property
     def name(self):
